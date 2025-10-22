@@ -129,17 +129,27 @@ db.ref(`${ROOT}/latest`).on('value', async snap=>{
   const nos = await db.ref(`${ROOT}/noshow/${n}`).get();
   if (nos.exists()){ callEl.style.display='none'; return; }
 
-  // حدّث النص
-  tNumEl.textContent = n;      // يُعرض رقم عادي؛ الصوت سيقرأ بالعربي
-  if (v.window){
-    wNumEl.textContent = v.window;
+  // ----- احصل على رقم الشباك -----
+  // أولاً من latest.window
+  let w = v.window;
+  // احتياط: لو مافيه window في latest، خذه من مسار operatorWindow
+  if (w == null) {
+    const wSnap = await db.ref(`${ROOT}/operatorWindow`).get();
+    if (wSnap.exists()) w = wSnap.val();
+  }
+
+  // حدّث الواجهة
+  tNumEl.textContent = n;
+  if (w != null && w !== '') {
+    wNumEl.textContent = w;
     wWrap.style.display = 'inline';
   } else {
     wWrap.style.display = 'none';
   }
 
   callEl.style.display = 'block';
-  announceTicket(n, v.window);
+  // انطق الرقم + الشباك (لو موجود)
+  announceTicket(n, w);
 });
 </script>
 </body>
