@@ -1,80 +1,146 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cardiac Announcer</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  body {
-    margin:0;
-    background:#f8fafc;
-    font-family:"Segoe UI",Tahoma,Arial,sans-serif;
-    color:#0f172a;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    height:100vh;
-    flex-direction:column;
+  :root{--ink:#0f172a}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f7fb;font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}
+
+  /* شريط الإعلان */
+  #call{
+    display:none;
+    width:min(960px,94vw);
+    margin:40px auto;
+    background:#000;color:#fff;
+    border-radius:16px;
+    padding:32px 18px;
+    text-align:center;
+    font-weight:800;
+    line-height:1.6;
+    font-size:clamp(26px,4.5vw,40px);
   }
-  h1 {
-    font-size:clamp(60px,12vw,120px);
-    margin:0;
+  #call b{font-weight:800}
+
+  /* تفعيل الصوت لأول مرة (مطلوب في iOS/Safari) */
+  #soundGate{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.75);color:#fff;z-index:10;font-size:22px;text-align:center
   }
-  h2 {
-    font-size:clamp(28px,5vw,48px);
-    margin:10px 0 0;
-    color:#334155;
+  #soundGate button{
+    margin-top:14px;padding:10px 18px;border:0;border-radius:10px;
+    background:#2563eb;color:#fff;font-weight:800;cursor:pointer
   }
 </style>
 
+<!-- Firebase (compat) -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 </head>
 <body>
-  <h1 id="num">-</h1>
-  <h2 id="win"></h2>
+
+<div id="soundGate">
+  <div>
+    اضغط “تفعيل الصوت” مرة واحدة للسماح بالتشغيل الصوتي.<br>
+    <button id="enableBtn">تفعيل الصوت</button>
+  </div>
+</div>
+
+<div id="call">
+  تذكرة رقم (<b id="tNum"></b>)
+  <span id="wWrap" style="display:none">
+    ، الرجاء التوجه إلى شباك <b id="wNum"></b>
+  </span>
+</div>
 
 <script>
-(function(){
-  const cfg={
-    apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
-    authDomain:"q-matic-b7d77.firebaseapp.com",
-    databaseURL:"https://q-matic-b7d77-default-rtdb.firebaseio.com",
-    projectId:"q-matic-b7d77",
-    storageBucket:"q-matic-b7d77.appspot.com",
-    messagingSenderId:"908187704899",
-    appId:"1:908187704899:web:b8bcf33cda90bafe81bef6"
-  };
-  firebase.initializeApp(cfg);
-  const db=firebase.database();
-  const ROOT="cardiac_demo";
+/* ================== إعداد Firebase ================== */
+const cfg={
+  apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
+  authDomain:"q-matic-b7d77.firebaseapp.com",
+  databaseURL:"https://q-matic-b7d77-default-rtdb.firebaseio.com",
+  projectId:"q-matic-b7d77",
+  storageBucket:"q-matic-b7d77.appspot.com",
+  messagingSenderId:"908187704899",
+  appId:"1:908187704899:web:b8bcf33cda90bafe81bef6"
+};
+firebase.initializeApp(cfg);
+const db = firebase.database();
+const ROOT = "cardiac_demo";
 
-  const numEl=document.getElementById("num");
-  const winEl=document.getElementById("win");
+/* ================== عناصر الواجهة ================== */
+const callEl = document.getElementById('call');
+const tNumEl = document.getElementById('tNum');
+const wWrap  = document.getElementById('wWrap');
+const wNumEl = document.getElementById('wNum');
 
-  let lastNum=null;
+/* ================== تحويل الأرقام ================== */
+const toAr = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 
-  db.ref(`${ROOT}/latest`).on("value", snap=>{
-    const v=snap.val();
-    if(!v) return;
+/* ================== نطق عربي (Web Speech) ================== */
+let ttsReady = false;
+let lastSpoken = "";
 
-    const n=v.number, w=v.window;
-    if(n===lastNum) return; // منع التكرار
-    lastNum=n;
+function primeTTS(){
+  if (ttsReady) return;
+  try { window.speechSynthesis.cancel(); } catch(e){}
+  ttsReady = true;
+  document.getElementById('soundGate').style.display = 'none';
+}
+document.getElementById('enableBtn').addEventListener('click', primeTTS);
 
-    numEl.textContent = n || "-";
-    winEl.textContent = w ? `شباك ${w}` : "";
+function pickArabicVoice(){
+  const voices = window.speechSynthesis.getVoices() || [];
+  return voices.find(v => /ar|arabic/i.test(v.lang)) || voices[0];
+}
+window.speechSynthesis.onvoiceschanged = pickArabicVoice;
 
-    // تشغيل الصوت
-    const phrase = w 
-      ? `تذكرة رقم ${n}، الرجاء التوجه إلى شباك ${w}`
-      : `تذكرة رقم ${n}`;
-    const u = new SpeechSynthesisUtterance(phrase);
-    u.lang = "ar-SA";
-    u.rate = 0.9;
-    speechSynthesis.speak(u);
-  });
-})();
+function speakAr(text, repeat=2){
+  if (!('speechSynthesis' in window) || !ttsReady) return;
+  for(let i=0;i<repeat;i++){
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ar-SA';
+    const v = pickArabicVoice();
+    if (v) u.voice = v;
+    u.rate = 1; u.pitch = 1;
+    window.speechSynthesis.speak(u);
+  }
+}
+
+function announceTicket(n, w){
+  const phrase = w
+    ? `تذكرة رقم ${toAr(n)}، الرجاء التوجه إلى شباك ${toAr(w)}`
+    : `تذكرة رقم ${toAr(n)}`;
+  if (phrase === lastSpoken) return; // منع التكرار
+  lastSpoken = phrase;
+  speakAr(phrase, 2);
+}
+
+/* ================== الاستماع لأحدث نداء من الـ Operator ================== */
+db.ref(`${ROOT}/latest`).on('value', async snap=>{
+  const v = snap && snap.val();
+  if (!v || !v.number){ callEl.style.display='none'; return; }
+
+  const n = v.number;
+
+  // لو No-Show أخفِ الإعلان
+  const nos = await db.ref(`${ROOT}/noshow/${n}`).get();
+  if (nos.exists()){ callEl.style.display='none'; return; }
+
+  // حدّث النص
+  tNumEl.textContent = n;      // يُعرض رقم عادي؛ الصوت سيقرأ بالعربي
+  if (v.window){
+    wNumEl.textContent = v.window;
+    wWrap.style.display = 'inline';
+  } else {
+    wWrap.style.display = 'none';
+  }
+
+  callEl.style.display = 'block';
+  announceTicket(n, v.window);
+});
 </script>
 </body>
 </html>
