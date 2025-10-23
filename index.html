@@ -177,22 +177,48 @@ async function playNext(){
   // إلى الذي يليه
   playNext();
 }
+// دالة تجيب رقم الشباك من أكثر من مصدر
+async function resolveWindow(v, n){
+  let cand = v.window ?? v.win ?? v.windowNum ?? v.counter ?? null;
 
+  if (typeof cand === 'string') {
+    const parsed = Number(cand);
+    cand = Number.isNaN(parsed) ? cand.trim() : parsed;
+  }
+
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const a = await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
+      if (a.exists()) cand = a.val();
+    } catch(e){}
+  }
+
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const g = await firebase.database().ref(`${ROOT}/operatorWindow`).get();
+      if (g.exists()) cand = g.val();
+    } catch(e){}
+  }
+
+  return cand;
+}
 /* ========== الاستماع إلى /calls كطابور ========== */
 db.ref(`${ROOT}/calls`)
   .orderByChild('ts')
   .startAt(bootTs)
-  .on('child_added', snap=>{
+  .on('child_added', async snap=>{
     const key = snap.key;
     const v   = snap.val() || {};
-    if(processed.has(key)) return;
+    if (processed.has(key)) return;
     processed.add(key);
 
-    // لو فيه noshow بعدين لهذا الرقم نتخطاه (اختياري). عادةً لا يتم دفع no-show هنا.
-    // نكتفي بإدخاله في الطابور:
     const n = Number(v.number);
-    const w = (v.window===0 || v.window) ? Number(v.window) : null;
-    enqueue({number:n, windowNum:w});
+    if (!n) return;
+
+    // 👇 هنا نستخدم الدالة اللي أضفناها في الخطوة ١
+    const w = await resolveWindow(v, n);
+
+    enqueue({ number: n, windowNum: w });
   });
 
 </script>
