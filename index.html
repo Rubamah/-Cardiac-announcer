@@ -161,6 +161,18 @@ async function playNext(){
     wWrap.style.display = 'none';
   }
   callEl.style.display = 'block';
+  // يحوّل الأرقام إلى أرقام عربية ٠١٢٣...
+function toArDigits(n){
+  return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+}
+
+// يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
+function buildSpeakPhrase(n, w){
+  const nD = toArDigits(n);
+  if (w == null || w === "") return `تذكرة رقم ${nD}.`;
+  const wD = toArDigits(w);
+  return `تذكرة رقم ${nD}، الرجاء التوجه إلى شباك ${wD}.`;
+}
 function cleanArabic(text){
   return text
     .replace(/\bواحدٌ\b/g,"واحد")
@@ -172,7 +184,7 @@ function cleanArabic(text){
     .replace(/\bثلاثهً\b/g,"ثلاثة")
     .replace(/\bثلاث\b/g,"ثلاثة"); 
 }
-  const phrase = cleanArabic(buildPhrase(number, windowNum));
+  const phrase = buildSpeakPhrase(number, windowNum);
   await speakOnce(phrase);
   // فاصل خفيف
   await new Promise(r=>setTimeout(r, 600));
