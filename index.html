@@ -5,15 +5,28 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cardiac Announcer</title>
 <style>
-  body{margin:0;background:#f5f7fb;font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;text-align:center}
-  #call{display:block;width:min(960px,94vw);margin:40px auto;background:#000;color:#fff;border-radius:16px;padding:32px 18px;font-weight:800;font-size:clamp(26px,4.5vw,40px);line-height:1.6}
+  body{
+    background:#f5f7fb;
+    font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    color:#0f172a; text-align:center; margin:0;
+  }
+  #call{
+    display:none; width:min(960px,94vw); margin:40px auto;
+    background:#000; color:#fff; border-radius:16px;
+    padding:32px 18px; font-weight:800; font-size:clamp(26px,4.5vw,40px); line-height:1.6;
+  }
   #call b{font-weight:800}
-  #status{margin:-20px auto 24px;color:#475569;font-size:14px}
-  #soundGate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.75);color:#fff;z-index:10;font-size:22px}
-  #soundGate button{margin-top:14px;padding:10px 18px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}
+  #soundGate{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.75); color:#fff; z-index:10; font-size:22px;
+  }
+  #soundGate button{
+    margin-top:14px; padding:10px 18px; border:0; border-radius:10px;
+    background:#2563eb; color:#fff; font-weight:800; cursor:pointer;
+  }
 </style>
 
-<!-- Firebase -->
+<!-- Firebase (compat) -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 </head>
@@ -26,15 +39,13 @@
   </div>
 </div>
 
-<div id="status">جاهز… بانتظار النداء التالي.</div>
-
 <div id="call">
-  تذكرة رقم (<b id="tNum">—</b>)
+  تذكرة رقم (<b id="tNum"></b>)
   <span id="wWrap" style="display:none">، الرجاء التوجه إلى شباك <b id="wNum"></b></span>
 </div>
 
 <script>
-/* ========== Firebase ========== */
+/* ================= Firebase ================= */
 const cfg={
   apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
   authDomain:"q-matic-b7d77.firebaseapp.com",
@@ -45,17 +56,16 @@ const cfg={
   appId:"1:908187704899:web:b8bcf33cda90bafe81bef6"
 };
 firebase.initializeApp(cfg);
-const db = firebase.database();
+const db   = firebase.database();
 const ROOT = "cardiac_demo";
 
-/* ========== UI refs ========== */
+/* ================= UI refs ================= */
 const callEl = document.getElementById('call');
 const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
-const statusEl = document.getElementById('status');
 
-/* ========== Arabic number words (no tanween) ========== */
+/* ========== تحويل الأرقام إلى كلمات عربية بلا تنوين ========== */
 function numToArWords(n){
   n = Number(n)||0;
   if(n===0) return "صفر";
@@ -64,93 +74,107 @@ function numToArWords(n){
   const t=["","","عشرون","ثلاثون","أربعون","خمسون","ستون","سبعون","ثمانون","تسعون"];
   if(n<10)  return u[n];
   if(n<20)  return teens[n-10];
-  if(n<100){const a=n%10,b=(n/10)|0;return a?`${u[a]} و${t[b]}`:t[b];}
-  if(n<1000){const h=(n/100)|0,r=n%100;return r?`${u[h]} مائة و${numToArWords(r)}`:`${u[h]} مائة`; }
-  if(n<10000){const th=(n/1000)|0,r=n%1000;const head=th===1?"ألف":(th===2?"ألفان":`${u[th]} آلاف`);return r?`${head} و${numToArWords(r)}`:head;}
-  return String(n).split("").map(d=>"٠١٢٣٤٥٦٧٨٩"[d]).join("");
+  if(n<100){ const a=n%10, b=(n/10)|0; return a? (u[a]+" و"+t[b]) : t[b]; }
+  if(n<1000){ const h=(n/100)|0, r=n%100; return r? (u[h]+" مائة و"+numToArWords(r)) : (u[h]+" مائة"); }
+  if(n<10000){ const th=(n/1000)|0, r=n%1000; const thw = th===1?"ألف": th===2?"ألفان": (u[th]+" آلاف"); return r? (thw+" و"+numToArWords(r)) : thw; }
+  return String(n).replace(/\d/g, d=>"٠١٢٣٤٥٦٧٨٩"[d]);
 }
 
-/* ========== TTS ========== */
+/* ================= الصوت: تهيئة + اختيار صوت رجل عربي ================= */
 let ttsReady=false;
 document.getElementById('enableBtn').onclick=()=>{
   try{ window.speechSynthesis.cancel(); }catch(e){}
+  setTimeout(()=>{ window.speechSynthesis.getVoices(); },50);
   ttsReady=true;
   document.getElementById('soundGate').style.display='none';
 };
+// حمّل الأصوات
+window.speechSynthesis.onvoiceschanged=()=>{ window.speechSynthesis.getVoices(); };
 
-function pickArabicVoice(){
-  const vs=window.speechSynthesis.getVoices()||[];
-  return vs.find(v=>/(^ar\b|arabic)/i.test(v.lang)||/arabic/i.test(v.name))||vs[0];
+function pickArabicMaleVoice(){
+  const voices = window.speechSynthesis.getVoices()||[];
+  if(!voices.length) return null;
+  const maleHints = ['hamed','naayf','zayd','zaid','tarik','mehdi','othman','male',' m '];
+  const ar = voices.filter(v => /^ar(-|$)/i.test(v.lang) || /arabic/i.test(v.name));
+  const arMale = ar.find(v => maleHints.some(h => v.name.toLowerCase().includes(h)));
+  if(arMale) return arMale;
+  if(ar.length) return ar[0];
+  return voices[0] || null;
 }
 
-function speakTwice(text){
-  if(!('speechSynthesis' in window) || !ttsReady){ return; }
-  const voice = pickArabicVoice();
-  const makeUtter = ()=>{ const u=new SpeechSynthesisUtterance(text); u.lang='ar-SA'; u.rate=1; u.pitch=1; if(voice) u.voice=voice; return u; };
-  // مرّتين متتاليتين
-  window.speechSynthesis.speak(makeUtter());
-  setTimeout(()=>window.speechSynthesis.speak(makeUtter()), 3200);
+/* ================= نطق الجملة مرتين متتاليتين ================= */
+function speakTwiceSequential(text){
+  if(!('speechSynthesis' in window) || !ttsReady) return;
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  const v = pickArabicMaleVoice();
+  const makeU = ()=>{ const u=new SpeechSynthesisUtterance(text); u.lang='ar-SA'; u.rate=1; u.pitch=1; if(v) u.voice=v; return u; };
+  const u1 = makeU(), u2 = makeU();
+  u1.onend = ()=>{ window.speechSynthesis.speak(u2); };
+  window.speechSynthesis.speak(u1);
 }
 
-/* ========== FIFO consumer ========== */
-/* نقرأ أقدم عنصر من /calls بحسب الطابع الزمني، نعلن مرتين، ثم نحذفه */
-let busy=false;
+/* ================= طابور النداءات (FIFO) ================= */
+let localQueue = [];
+let processing = false;
 
-async function processNext(){
-  if(busy) return;
-  busy=true;
-  try{
-    const snap = await db.ref(`${ROOT}/calls`).orderByChild('ts').limitToFirst(1).get();
-    if(!snap.exists()){ statusEl.textContent = "لا توجد نداءات حاليًا."; busy=false; return; }
+// استقبل أي عنصر جديد في /calls
+db.ref(`${ROOT}/calls`).on('child_added', async snap=>{
+  const key = snap.key;
+  const val = snap.val()||{};
+  if(!val || !val.number) return;
 
-    // نأخذ أول عنصر
-    let firstKey=null, firstVal=null;
-    snap.forEach(ch=>{ firstKey=ch.key; firstVal=ch.val(); });
-
-    // محاولة قفل (قابلة للفشل إذا جهاز آخر أخذها)
-    const lockRef = db.ref(`${ROOT}/calls/${firstKey}/lock`);
-    const lockTx  = await lockRef.transaction(cur => cur ? cur : (Date.now()+":"+Math.random().toString(16).slice(2)));
-    if(!lockTx.committed){ busy=false; return; } // لم نستطع القفل
-
-    // بيانات النداء
-    const n = firstVal.number;
-    const w = (firstVal.window!=null && firstVal.window!=="") ? firstVal.window : null;
-
-    // تحديث العرض
-    tNumEl.textContent = n;
-    if(w){ wNumEl.textContent = w; wWrap.style.display='inline'; }
-    else { wWrap.style.display='none'; }
-    callEl.style.display='block';
-    statusEl.textContent = "جارِ النداء…";
-
-    // جملة بدون تنوين
-    const phrase = w
-      ? `تذكرة رقم ${numToArWords(n)}، الرجاء التوجه إلى شباك ${numToArWords(w)}.`
-      : `تذكرة رقم ${numToArWords(n)}.`;
-
-    // نطق مرتين
-    speakTwice(phrase);
-
-    // انتظار انتهاء النداءين ثم حذف النداء والانتقال للي بعده
-    setTimeout(async ()=>{
-      try{ await db.ref(`${ROOT}/calls/${firstKey}`).remove(); }catch(e){}
-      statusEl.textContent = "تم النداء. بانتظار التالي…";
-      busy=false;
-      processNext();
-    }, 7000);
-
-  }catch(e){
-    statusEl.textContent = "حدث خطأ بسيط، سأحاول مجددًا…";
-    busy=false;
-    setTimeout(processNext, 1000);
+  // تجاهل إن كان No-Show قبل الإعلان
+  const ns = await db.ref(`${ROOT}/noshow/${val.number}`).get();
+  if(ns.exists()){
+    // نظّف العنصر حتى لا يعلق بالطابور
+    db.ref(`${ROOT}/calls/${key}`).remove();
+    return;
   }
+
+  localQueue.push({key, ...val});
+  // حافظ على ترتيب الزمن (احتياط)
+  localQueue.sort((a,b)=> (a.ts||0) - (b.ts||0));
+  processQueue();
+});
+
+async function processQueue(){
+  if(processing) return;
+  if(!localQueue.length) return;
+  processing = true;
+
+  const item = localQueue.shift();
+  const {key, number, window:win} = item;
+
+  // عرض بصري
+  tNumEl.textContent = number;
+  if(win!=null && win!==""){
+    wNumEl.textContent = win;
+    wWrap.style.display = 'inline';
+  }else{
+    wWrap.style.display = 'none';
+  }
+  callEl.style.display='block';
+
+  // نص بدون تنوين
+  const phrase = (win!=null && win!=="")
+    ? `تذكرة رقم ${numToArWords(number)}، الرجاء التوجه إلى شباك ${numToArWords(win)}.`
+    : `تذكرة رقم ${numToArWords(number)}.`;
+
+  // انطق مرتين بالتسلسل
+  await new Promise(resolve=>{
+    // نطق الأولى ثم الثانية عبر onend داخل speakTwiceSequential
+    // نستخدم مُؤقّت أمان بطول تقريبي (طول الجملة ~3-4 ثوانٍ)
+    speakTwiceSequential(phrase);
+    setTimeout(resolve, 9000); // يمهّد لانتهاء النطقتين
+  });
+
+  // شيل النداء من الـ DB حتى لا يُعاد
+  try{ await db.ref(`${ROOT}/calls/${key}`).remove(); }catch(e){}
+
+  processing = false;
+  // عالج التالي
+  processQueue();
 }
-
-// استمع لأي عناصر جديدة وابدأ المعالجة إن لم تكن مشغولاً
-db.ref(`${ROOT}/calls`).on('child_added', ()=>processNext());
-
-// أيضًا جرّب تشغيل المعالجة عند البدء
-processNext();
 </script>
 </body>
 </html>
