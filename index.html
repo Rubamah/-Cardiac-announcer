@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cardiac Announcer</title>
+<title>Cardiac Announcer (Queue)</title>
 <style>
   body{
     background:#f5f7fb;
-    font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    color:#0f172a; text-align:center; margin:0;
+    font-family:-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#0f172a; margin:0; text-align:center;
   }
   #call{
     display:none; width:min(960px,94vw); margin:40px auto;
@@ -16,6 +16,8 @@
     font-weight:800; font-size:clamp(26px,4.5vw,40px); line-height:1.6;
   }
   #call b{font-weight:800}
+
+  /* بوابة السماح بالصوت */
   #soundGate{
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(0,0,0,.75); color:#fff; z-index:10; font-size:22px;
@@ -26,7 +28,7 @@
   }
 </style>
 
-<!-- Firebase -->
+<!-- Firebase compat -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 </head>
@@ -34,20 +36,18 @@
 
 <div id="soundGate">
   <div>
-    اضغط “تفعيل الصوت” للسماح بالتشغيل الصوتي.<br>
+    اضغط “تفعيل الصوت” مرة واحدة للسماح بالتشغيل الصوتي.<br>
     <button id="enableBtn">تفعيل الصوت</button>
   </div>
 </div>
 
 <div id="call">
   تذكرة رقم (<b id="tNum"></b>)
-  <span id="wWrap" style="display:none">
-    ، الرجاء التوجه إلى شباك <b id="wNum"></b>
-  </span>
+  <span id="wWrap" style="display:none">، الرجاء التوجه إلى شباك <b id="wNum"></b></span>
 </div>
 
 <script>
-/* ========== Firebase ========== */
+/* ========== إعداد Firebase ========== */
 const cfg={
   apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
   authDomain:"q-matic-b7d77.firebaseapp.com",
@@ -58,8 +58,8 @@ const cfg={
   appId:"1:908187704899:web:b8bcf33cda90bafe81bef6"
 };
 firebase.initializeApp(cfg);
-const db=firebase.database();
-const ROOT="cardiac_demo";
+const db = firebase.database();
+const ROOT = "cardiac_demo";
 
 /* ========== عناصر الواجهة ========== */
 const callEl = document.getElementById('call');
@@ -67,98 +67,134 @@ const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
-/* ========== أدوات أرقام ========== */
-// أرقام عربية شرقية (للواجهة والصوت)
-const toArDigits = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+/* ========== تحويل الأرقام إلى كلمات عربية (بدون تنوين) ========== */
+function numToArWords(n){
+  n = Number(n)||0;
+  if(n===0) return "صفر";
+  const u=["","واحد","اثنان","ثلاثة","أربعة","خمسة","ستة","سبعة","ثمانية","تسعة"];
+  const teens=["عشرة","أحد عشر","اثنا عشر","ثلاثة عشر","أربعة عشر","خمسة عشر","ستة عشر","سبعة عشر","ثمانية عشر","تسعة عشر"];
+  const t=["","","عشرون","ثلاثون","أربعون","خمسون","ستون","سبعون","ثمانون","تسعون"];
+  if(n<10)  return u[n];
+  if(n<20)  return teens[n-10];
+  if(n<100){ const a=n%10, b=(n/10)|0; return a? (u[a]+" و"+t[b]) : t[b]; }
+  if(n<1000){
+    const h=(n/100)|0, r=n%100;
+    const hword = (h===1?"مائة": h===2?"مائتان": (u[h]+" مائة"));
+    return r? (hword+" و"+numToArWords(r)) : hword;
+  }
+  if(n<10000){
+    const th=(n/1000)|0, r=n%1000;
+    const thw = th===1?"ألف": th===2?"ألفان": (u[th]+" آلاف");
+    return r? (thw+" و"+numToArWords(r)) : thw;
+  }
+  // fallback: أرقام عربية
+  return String(n).replace(/\d/g,d=>"٠١٢٣٤٥٦٧٨٩"[d]);
+}
 
 /* ========== إعداد الصوت ========== */
-let ttsReady=false, lastKey="";
+let ttsReady=false;
 document.getElementById('enableBtn').onclick=()=>{
   try{ window.speechSynthesis.cancel(); }catch(e){}
-  ttsReady=true; document.getElementById('soundGate').style.display='none';
+  ttsReady=true;
+  document.getElementById('soundGate').style.display='none';
 };
 
-function pickArabicMaleVoice(){
-  const voices = window.speechSynthesis.getVoices() || [];
-  // نحاول صوت عربي رجالي إن وُجد، وإلا أي صوت عربي، ثم أي صوت
-  return voices.find(v => /ar/i.test(v.lang) && /male|\b(M)|(Guy|Omar|Hani)/i.test(v.name))
-      || voices.find(v => /ar/i.test(v.lang))
-      || voices[0];
+function pickArabicVoice(){
+  const voices = window.speechSynthesis.getVoices()||[];
+  // نحاول تفضيل أصوات عربية رجالية إن توفرت بالاسم
+  const prefer = [
+    /ar-SA/i, /ar-[A-Z]{2}/i, /Arabic/i
+  ];
+  for(const p of prefer){
+    const v = voices.find(v=>p.test(v.lang)||p.test(v.name));
+    if(v) return v;
+  }
+  return voices[0] || null;
 }
 
-// ينطق مقطع نصي واحد
-function say(text){
-  if(!ttsReady || !('speechSynthesis' in window)) return;
-  const u=new SpeechSynthesisUtterance(text);
-  u.lang='ar-SA';
-  const v=pickArabicMaleVoice();
-  if(v) u.voice=v;
-  u.rate=1; u.pitch=1;
-  window.speechSynthesis.speak(u);
-}
-
-// ينطق الجملة مقسّمة: كلمات → رقم ← كلمات → رقم (بدون تنوين)
-function speakAnnouncement(number, windowNo, repeatTimes=2){
-  // نمنع أي كلام سابق "معلق" يسبب نفَس/كحة
-  try{ window.speechSynthesis.cancel(); }catch(e){}
-
-  const nDigits = toArDigits(number);
-  const wDigits = windowNo!=null ? toArDigits(windowNo) : null;
-
-  // جملة بدون تنوين/تعقيد صرفي
-  // الترتيب: [تذكرة رقم] [123] [الرجاء التوجه إلى شباك] [2]
-  const part1 = 'تذكرة رقم';
-  const part2 = nDigits;
-  const part3 = wDigits ? 'الرجاء التوجه إلى شباك' : null;
-  const part4 = wDigits;
-
-  for(let r=0;r<repeatTimes;r++){
-    const base = r*3000;     // تأخير تكرار كامل
-    setTimeout(()=>say(part1),            base + 0);
-    setTimeout(()=>say(part2),            base + 350);
-    if(part3){
-      setTimeout(()=>say(part3),          base + 1200);
-      setTimeout(()=>say(part4),          base + 1550);
+function speakOnce(text){
+  return new Promise(resolve=>{
+    if(!ttsReady || !('speechSynthesis' in window)){
+      resolve(); return;
     }
-  }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ar-SA';
+    u.rate = 1; u.pitch = 1;
+    const v = pickArabicVoice(); if(v) u.voice = v;
+    u.onend = ()=>resolve();
+    u.onerror= ()=>resolve(); // لا نعلق لو صار خطأ
+    window.speechSynthesis.speak(u);
+  });
 }
 
-/* ========== مستمع Firebase ========== */
-db.ref(`${ROOT}/latest`).on('value', async snap=>{
-  const v = snap && snap.val();
-  if(!v || !v.number){ callEl.style.display='none'; return; }
+function buildPhrase(n, w){
+  // بدون تنوين: نصنا لا يحوي حركات أصلاً
+  const nWords = numToArWords(n);
+  if(w==null || w==="") return `تذكرة رقم ${nWords}.`;
+  const wWords = numToArWords(w);
+  return `تذكرة رقم ${nWords}، الرجاء التوجه إلى شباك ${wWords}.`;
+}
 
-  const n = Number(v.number);
+/* ========== نظام الطابور الصوتي (FIFO) ========== */
+const queue = [];
+let playing=false;
+const processed = new Set(); // مفاتيح push التي تم استلامها
+const bootTs = Date.now() - 5000; // هامش 5 ثواني لتفادي السباق
 
-  // لا تُظهر/تنطق لو الرقم No-Show
-  const ns = await db.ref(`${ROOT}/noshow/${n}`).get();
-  if(ns.exists()){ callEl.style.display='none'; return; }
+function enqueue(item){
+  queue.push(item);
+  if(!playing) playNext();
+}
 
-  // رقم الشباك: من latest.window وإن ما وجد خذي operatorWindow
-  let w = (v.window!==undefined && v.window!==null && v.window!=="") ? Number(v.window) : null;
-  if(w==null){
-    const ws=await db.ref(`${ROOT}/operatorWindow`).get();
-    if(ws.exists()) w = Number(ws.val());
-  }
+async function playNext(){
+  if(queue.length===0){ playing=false; return; }
+  playing = true;
 
-  // تحديث الواجهة
-  tNumEl.textContent = n;
-  if(w!=null && !Number.isNaN(w)){
-    wNumEl.textContent = w;
+  const {number, windowNum} = queue.shift();
+
+  // عرض الشريط
+  tNumEl.textContent = number;
+  if(windowNum!=null && windowNum!==""){
+    wNumEl.textContent = windowNum;
     wWrap.style.display = 'inline';
   }else{
     wWrap.style.display = 'none';
   }
   callEl.style.display = 'block';
 
-  // منع تكرار نفس النداء حرفيًا
-  const key = `${n}|${w??''}|${v.ts??''}`;
-  if(key === lastKey) return;
-  lastKey = key;
+  const phrase = buildPhrase(number, windowNum);
 
-  // نُطق على 4 مقاطع (بدون تنوين)، مرتين
-  speakAnnouncement(n, w, 2);
-});
+  // نداء مرتين متتاليتين
+  await speakOnce(phrase);
+  // فاصل خفيف
+  await new Promise(r=>setTimeout(r, 600));
+  await speakOnce(phrase);
+
+  // إبقاء الشريط لحظة إضافية ثم إخفاؤه
+  await new Promise(r=>setTimeout(r, 600));
+  callEl.style.display = 'none';
+
+  // إلى الذي يليه
+  playNext();
+}
+
+/* ========== الاستماع إلى /calls كطابور ========== */
+db.ref(`${ROOT}/calls`)
+  .orderByChild('ts')
+  .startAt(bootTs)
+  .on('child_added', snap=>{
+    const key = snap.key;
+    const v   = snap.val() || {};
+    if(processed.has(key)) return;
+    processed.add(key);
+
+    // لو فيه noshow بعدين لهذا الرقم نتخطاه (اختياري). عادةً لا يتم دفع no-show هنا.
+    // نكتفي بإدخاله في الطابور:
+    const n = Number(v.number);
+    const w = (v.window===0 || v.window) ? Number(v.window) : null;
+    enqueue({number:n, windowNum:w});
+  });
+
 </script>
 </body>
 </html>
