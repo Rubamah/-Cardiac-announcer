@@ -6,23 +6,27 @@
 <title>Cardiac Announcer</title>
 <style>
   body{
-    background:#f5f7fb;font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    color:#0f172a;text-align:center;margin:0;
+    background:#f5f7fb;
+    font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    color:#0f172a; text-align:center; margin:0;
   }
   #call{
-    display:block;width:min(960px,94vw);margin:40px auto;
-    background:#000;color:#fff;border-radius:16px;
-    padding:32px 18px;font-weight:800;font-size:clamp(26px,4.5vw,40px);line-height:1.6;
+    display:none; width:min(960px,94vw); margin:40px auto;
+    background:#000; color:#fff; border-radius:16px; padding:32px 18px;
+    font-weight:800; font-size:clamp(26px,4.5vw,40px); line-height:1.6;
   }
+  #call b{font-weight:800}
   #soundGate{
-    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:rgba(0,0,0,.75);color:#fff;z-index:10;font-size:22px;
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.75); color:#fff; z-index:10; font-size:22px;
   }
   #soundGate button{
-    margin-top:14px;padding:10px 18px;border:0;border-radius:10px;
-    background:#2563eb;color:#fff;font-weight:800;cursor:pointer;
+    margin-top:14px; padding:10px 18px; border:0; border-radius:10px;
+    background:#2563eb; color:#fff; font-weight:800; cursor:pointer;
   }
 </style>
+
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 </head>
@@ -30,17 +34,20 @@
 
 <div id="soundGate">
   <div>
-    اضغط “تفعيل الصوت” مرة واحدة للسماح بالتشغيل الصوتي.<br>
+    اضغط “تفعيل الصوت” للسماح بالتشغيل الصوتي.<br>
     <button id="enableBtn">تفعيل الصوت</button>
   </div>
 </div>
 
 <div id="call">
-  <div>تذكرة رقم (<b id="tNum">—</b>)</div>
-  <div id="wWrap" style="display:none">الرجاء التوجه إلى شباك <b id="wNum"></b></div>
+  تذكرة رقم (<b id="tNum"></b>)
+  <span id="wWrap" style="display:none">
+    ، الرجاء التوجه إلى شباك <b id="wNum"></b>
+  </span>
 </div>
 
 <script>
+/* ========== Firebase ========== */
 const cfg={
   apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
   authDomain:"q-matic-b7d77.firebaseapp.com",
@@ -54,61 +61,103 @@ firebase.initializeApp(cfg);
 const db=firebase.database();
 const ROOT="cardiac_demo";
 
-const tNumEl=document.getElementById("tNum");
-const wWrap=document.getElementById("wWrap");
-const wNumEl=document.getElementById("wNum");
+/* ========== عناصر الواجهة ========== */
+const callEl = document.getElementById('call');
+const tNumEl = document.getElementById('tNum');
+const wWrap  = document.getElementById('wWrap');
+const wNumEl = document.getElementById('wNum');
 
-function numToArWords(n){
-  n=Number(n)||0;
-  const u=["","واحد","اثنان","ثلاثة","أربعة","خمسة","ستة","سبعة","ثمانية","تسعة"];
-  const teens=["عشرة","أحد عشر","اثنا عشر","ثلاثة عشر","أربعة عشر","خمسة عشر","ستة عشر","سبعة عشر","ثمانية عشر","تسعة عشر"];
-  const t=["","","عشرون","ثلاثون","أربعون","خمسون","ستون","سبعون","ثمانون","تسعون"];
-  if(n<10)return u[n];
-  if(n<20)return teens[n-10];
-  if(n<100){let a=n%10,b=Math.floor(n/10);return a?`${u[a]} و${t[b]}`:t[b];}
-  if(n<1000){let h=Math.floor(n/100),r=n%100;return r?`${u[h]} مائة و${numToArWords(r)}`:`${u[h]} مائة`;}
-  if(n<10000){let th=Math.floor(n/1000),r=n%1000;let thw=th===1?"ألف":th===2?"ألفان":`${u[th]} آلاف`;return r?`${thw} و${numToArWords(r)}`:thw;}
-  return String(n);
-}
+/* ========== أدوات أرقام ========== */
+// أرقام عربية شرقية (للواجهة والصوت)
+const toArDigits = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 
-let ttsReady=false;
-document.getElementById("enableBtn").onclick=()=>{
-  try{speechSynthesis.cancel();}catch(e){}
-  setTimeout(()=>speechSynthesis.getVoices(),100);
-  ttsReady=true;
-  document.getElementById("soundGate").style.display="none";
+/* ========== إعداد الصوت ========== */
+let ttsReady=false, lastKey="";
+document.getElementById('enableBtn').onclick=()=>{
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  ttsReady=true; document.getElementById('soundGate').style.display='none';
 };
 
 function pickArabicMaleVoice(){
-  const vs=speechSynthesis.getVoices();
-  if(!vs.length)return null;
-  const ar=vs.filter(v=>/^ar/i.test(v.lang)||/arabic/i.test(v.name));
-  const male=ar.find(v=>/(Hamed|Naayf|Zaid|Tarik|Male|Hamid)/i.test(v.name));
-  return male||ar[0]||vs[0];
+  const voices = window.speechSynthesis.getVoices() || [];
+  // نحاول صوت عربي رجالي إن وُجد، وإلا أي صوت عربي، ثم أي صوت
+  return voices.find(v => /ar/i.test(v.lang) && /male|\b(M)|(Guy|Omar|Hani)/i.test(v.name))
+      || voices.find(v => /ar/i.test(v.lang))
+      || voices[0];
 }
 
-function speakTwice(text){
-  if(!ttsReady)return;
-  try{speechSynthesis.cancel();}catch(e){}
+// ينطق مقطع نصي واحد
+function say(text){
+  if(!ttsReady || !('speechSynthesis' in window)) return;
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='ar-SA';
   const v=pickArabicMaleVoice();
-  const makeU=()=>{const u=new SpeechSynthesisUtterance(text);u.lang="ar-SA";u.rate=1;u.pitch=1;if(v)u.voice=v;return u;};
-  const u1=makeU(),u2=makeU();
-  u1.onend=()=>speechSynthesis.speak(u2);
-  speechSynthesis.speak(u1);
+  if(v) u.voice=v;
+  u.rate=1; u.pitch=1;
+  window.speechSynthesis.speak(u);
 }
 
-// 🔹 listener: حتى لو ما فيه بيانات يطبع على الشاشة
-db.ref(`${ROOT}/calls`).on("child_added",snap=>{
-  const v=snap.val();
-  if(!v)return;
-  const n=v.number||"-";
-  const w=v.window||"";
-  tNumEl.textContent=n;
-  if(w){wNumEl.textContent=w;wWrap.style.display="block";}else{wWrap.style.display="none";}
-  const phrase=w?`تذكرة رقم ${numToArWords(n)}، الرجاء التوجه إلى شباك ${numToArWords(w)}.`:`تذكرة رقم ${numToArWords(n)}.`;
-  speakTwice(phrase);
-  // نحذف بعد الإعلان
-  setTimeout(()=>db.ref(`${ROOT}/calls/${snap.key}`).remove(),8000);
+// ينطق الجملة مقسّمة: كلمات → رقم ← كلمات → رقم (بدون تنوين)
+function speakAnnouncement(number, windowNo, repeatTimes=2){
+  // نمنع أي كلام سابق "معلق" يسبب نفَس/كحة
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+
+  const nDigits = toArDigits(number);
+  const wDigits = windowNo!=null ? toArDigits(windowNo) : null;
+
+  // جملة بدون تنوين/تعقيد صرفي
+  // الترتيب: [تذكرة رقم] [123] [الرجاء التوجه إلى شباك] [2]
+  const part1 = 'تذكرة رقم';
+  const part2 = nDigits;
+  const part3 = wDigits ? 'الرجاء التوجه إلى شباك' : null;
+  const part4 = wDigits;
+
+  for(let r=0;r<repeatTimes;r++){
+    const base = r*3000;     // تأخير تكرار كامل
+    setTimeout(()=>say(part1),            base + 0);
+    setTimeout(()=>say(part2),            base + 350);
+    if(part3){
+      setTimeout(()=>say(part3),          base + 1200);
+      setTimeout(()=>say(part4),          base + 1550);
+    }
+  }
+}
+
+/* ========== مستمع Firebase ========== */
+db.ref(`${ROOT}/latest`).on('value', async snap=>{
+  const v = snap && snap.val();
+  if(!v || !v.number){ callEl.style.display='none'; return; }
+
+  const n = Number(v.number);
+
+  // لا تُظهر/تنطق لو الرقم No-Show
+  const ns = await db.ref(`${ROOT}/noshow/${n}`).get();
+  if(ns.exists()){ callEl.style.display='none'; return; }
+
+  // رقم الشباك: من latest.window وإن ما وجد خذي operatorWindow
+  let w = (v.window!==undefined && v.window!==null && v.window!=="") ? Number(v.window) : null;
+  if(w==null){
+    const ws=await db.ref(`${ROOT}/operatorWindow`).get();
+    if(ws.exists()) w = Number(ws.val());
+  }
+
+  // تحديث الواجهة
+  tNumEl.textContent = n;
+  if(w!=null && !Number.isNaN(w)){
+    wNumEl.textContent = w;
+    wWrap.style.display = 'inline';
+  }else{
+    wWrap.style.display = 'none';
+  }
+  callEl.style.display = 'block';
+
+  // منع تكرار نفس النداء حرفيًا
+  const key = `${n}|${w??''}|${v.ts??''}`;
+  if(key === lastKey) return;
+  lastKey = key;
+
+  // نُطق على 4 مقاطع (بدون تنوين)، مرتين
+  speakAnnouncement(n, w, 2);
 });
 </script>
 </body>
