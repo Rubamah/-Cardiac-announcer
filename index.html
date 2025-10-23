@@ -87,7 +87,7 @@ const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
-/* ========== تحويل رقم إلى كلمات عربية ========== */
+/* ========== تحويل رقم إلى كلمات عربية (موجود كما هو) ========== */
 function numToArWords(n){
   n = Number(n)||0;
   if (n === 0) return "صفر";
@@ -102,9 +102,18 @@ function numToArWords(n){
   return String(n).split("").map(d=>"٠١٢٣٤٥٦٧٨٩"[d]).join("");
 }
 
-/* ========== إعداد الصوت ========== */
+/* ========== (جديد) تحويل الأرقام إلى أرقام عربية مباشرة لمنع الإعراب ========== */
+function toArDigits(n){
+  return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+}
+
+/* ========== إعداد الصوت (كما هو) ========== */
 let ttsReady=false, lastKey="";
-document.getElementById('enableBtn').onclick=()=>{window.speechSynthesis.cancel();ttsReady=true;document.getElementById('soundGate').style.display='none';};
+document.getElementById('enableBtn').onclick=()=>{
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  ttsReady=true;
+  document.getElementById('soundGate').style.display='none';
+};
 
 function pickArabicVoice(){
   const v=window.speechSynthesis.getVoices();
@@ -114,19 +123,30 @@ function pickArabicVoice(){
 function speakLoop(text,reps=2){
   if(!ttsReady)return;
   const v=pickArabicVoice();
-  const say=()=>{const u=new SpeechSynthesisUtterance(text);u.lang='ar-SA';u.rate=1;u.pitch=1;if(v)u.voice=v;window.speechSynthesis.speak(u);}
-  // نعيد الجملة بالكامل مرتين بتأخير بسيط
-  for(let i=0;i<reps;i++){setTimeout(()=>{say();},i*4500);}
+  const say=()=>{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='ar-SA';
+    u.rate=1;
+    u.pitch=1;
+    if(v) u.voice=v;
+    window.speechSynthesis.speak(u);
+  };
+  for(let i=0;i<reps;i++){
+    setTimeout(say, i*4500);
+  }
 }
 
-/* ========== نداء ========== */
-async function announceTicket(n,w){
-  const phrase=w?`تذكرة رقم ${numToArWords(n)}، الرجاء التوجه إلى شباك ${numToArWords(w)}.`
-                 :`تذكرة رقم ${numToArWords(n)}.`;
-  speakLoop(phrase,2); // نداء مرتين
+/* ========== (معدَّلة فقط) نداء بصيغة "رقم: ١٢" لمنع التنوين الخاطئ ========== */
+function announceTicket(n,w){
+  const num = toArDigits(n);
+  const win = w ? toArDigits(w) : null;
+  const phrase = win
+    ? `تذكرة رقم: ${num}، الرجاء التوجه إلى شباك رقم: ${win}`
+    : `تذكرة رقم: ${num}`;
+  speakLoop(phrase, 2); // مرتين
 }
 
-/* ========== مستمع Firebase ========== */
+/* ========== مستمع Firebase (كما هو) ========== */
 db.ref(`${ROOT}/latest`).on('value',async s=>{
   const v=s&&s.val();
   if(!v||!v.number){callEl.style.display='none';return;}
@@ -137,15 +157,22 @@ db.ref(`${ROOT}/latest`).on('value',async s=>{
   if(ns.exists()){callEl.style.display='none';return;}
 
   let w=(v.window!==undefined&&v.window!==null&&v.window!=="")?v.window:null;
-  if(w===null){const ws=await db.ref(`${ROOT}/operatorWindow`).get();if(ws.exists())w=ws.val();}
+  if(w===null){
+    const ws=await db.ref(`${ROOT}/operatorWindow`).get();
+    if(ws.exists()) w=ws.val();
+  }
 
   // عرض مرئي
   tNumEl.textContent=n;
-  if(w){wNumEl.textContent=w;wWrap.style.display='inline';}else{wWrap.style.display='none';}
+  if(w){wNumEl.textContent=w;wWrap.style.display='inline';}
+  else {wWrap.style.display='none';}
   callEl.style.display='block';
 
   const key=`${n}|${w||''}|${v.ts||''}`;
-  if(key!==lastKey){lastKey=key;announceTicket(n,w);}
+  if(key!==lastKey){
+    lastKey=key;
+    announceTicket(n,w);
+  }
 });
 </script>
 </body>
