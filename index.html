@@ -161,10 +161,18 @@ async function playNext(){
     wWrap.style.display = 'none';
   }
   callEl.style.display = 'block';
-
-  const phrase = buildPhrase(number, windowNum);
-
-  // نداء مرتين متتاليتين
+function cleanArabic(text){
+  return text
+    .replace(/\bواحدٌ\b/g,"واحد")
+    .replace(/\bواحدٍ\b/g,"واحد")
+    .replace(/\bواحدً\b/g,"واحد")
+    .replace(/\bواحد\b/g,"واحد") // تأكيد إضافي
+    .replace(/\bثلاثه\b/g,"ثلاثة")
+    .replace(/\bثلاثهٍ\b/g,"ثلاثة")
+    .replace(/\bثلاثهً\b/g,"ثلاثة")
+    .replace(/\bثلاث\b/g,"ثلاثة"); 
+}
+  const phrase = cleanArabic(buildPhrase(number, windowNum));
   await speakOnce(phrase);
   // فاصل خفيف
   await new Promise(r=>setTimeout(r, 600));
