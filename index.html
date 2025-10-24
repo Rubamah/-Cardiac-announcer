@@ -69,32 +69,16 @@ function toArDigits(n) {
   return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
 }
 
-/* ========== الصوت (تعديل الزر فقط) ========== */
+/* ========== الصوت ========== */
 let ttsReady = false;
-
 document.getElementById('enableBtn').onclick = () => {
   try { window.speechSynthesis.cancel(); } catch(e) {}
-
-  // warm-up صامت لضمان السماح بالنطق
-  const u = new SpeechSynthesisUtterance(" ");
-  u.lang   = 'ar-SA';
-  u.volume = 0;        // صامت
-  u.rate   = 1;
-  u.pitch  = 1;
-  u.onend  = () => {
-    ttsReady = true;
-    document.getElementById('soundGate').style.display = 'none';
-  };
-  u.onerror = () => {
-    // حتى لو فشل، نكمل ونخفي البوابة
-    ttsReady = true;
-    document.getElementById('soundGate').style.display = 'none';
-  };
-  window.speechSynthesis.speak(u);
+  ttsReady = true;
+  document.getElementById('soundGate').style.display = 'none';
 };
 
 window.speechSynthesis.onvoiceschanged = () => {
-  pickArabicVoice();
+  pickArabicVoice(); // إعادة تحميل الصوت عند توفره
 };
 
 function pickArabicVoice() {
@@ -108,10 +92,13 @@ function pickArabicVoice() {
 function speakOnce(text) {
   return new Promise(resolve => {
     if (!ttsReady || !('speechSynthesis' in window)) { resolve(); return; }
+
+    // تحسين التشكيل: حذف التنوين والسكون فقط
     text = text
       .replace(/[ٌٍْـ]/g, "")
       .replace(/\s+/g, " ")
       .trim();
+
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ar-SA';
     u.rate = 1.1;
@@ -143,6 +130,7 @@ function buildFastPhrase(n, w) {
   const z = "\u200C";
   const num = toArDigits(n);
   const wnum = (w == null || w === "") ? "" : fixNumberWord(w);
+
   if (!wnum)
     return `تَذكِرة${z} رقم${z} ${num}`;
   return `تَذكِرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشُبّاك${z} رقم${z} ${wnum}`;
@@ -176,7 +164,7 @@ async function playNext() {
 
   const phrase = buildFastPhrase(number, windowNum);
   await speakOnce(phrase);
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 1000)); // فاصل أطول
   await speakOnce(phrase);
 
   await new Promise(r => setTimeout(r, 500));
@@ -185,14 +173,26 @@ async function playNext() {
   playNext();
 }
 
-/* ========== جلب رقم الشباك — نأخذ فقط من نفس عنصر /calls ========== */
-async function resolveWindow(v) {
+/* ========== جلب رقم الشباك من مصادر متعددة ========== */
+async function resolveWindow(v, n) {
   let cand = v.window ?? v.win ?? v.windowNum ?? v.counter ?? null;
   if (typeof cand === 'string') {
     const parsed = Number(cand);
     cand = Number.isNaN(parsed) ? cand.trim() : parsed;
   }
-  return (cand === 0 || cand) ? cand : null;
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const a = await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
+      if (a.exists()) cand = a.val();
+    } catch (e) {}
+  }
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const g = await firebase.database().ref(`${ROOT}/operatorWindow`).get();
+      if (g.exists()) cand = g.val();
+    } catch (e) {}
+  }
+  return cand;
 }
 
 /* ========== مستمع Firebase ========== */
@@ -206,8 +206,8 @@ db.ref(`${ROOT}/calls`)
 
     const n = Number(v.number);
     if (!n) return;
+    const w = await resolveWindow(v, n);
 
-    const w = await resolveWindow(v);
     enqueue({ number: n, windowNum: w });
   });
 </script>
