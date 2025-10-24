@@ -199,7 +199,7 @@ function speakOnceWord(text){
 
 // === 3) نطق سلسلة كلمات كلمة-كلمة مع فاصل بسيط ===
 function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }// نطق أسرع وأنعم بين الكلمات
-async function speakWords(words, gap=50){
+async function speakWords(words, gap=10){
   for (const w of words){
     await speakOnceWord(w);
     await wait(gap); // فاصل بسيط جداً بين الكلمات
