@@ -5,22 +5,22 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cardiac Announcer (Queue)</title>
 <style>
-  body{
+  body {
     background:#f5f7fb;
     font-family:-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     color:#0f172a; margin:0; text-align:center;
   }
-  #call{
+  #call {
     display:none; width:min(960px,94vw); margin:40px auto;
     background:#000; color:#fff; border-radius:16px; padding:32px 18px;
     font-weight:800; font-size:clamp(26px,4.5vw,40px); line-height:1.6;
   }
-  #call b{font-weight:800}
-  #soundGate{
+  #call b { font-weight:800 }
+  #soundGate {
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(0,0,0,.75); color:#fff; z-index:10; font-size:22px;
   }
-  #soundGate button{
+  #soundGate button {
     margin-top:14px; padding:10px 18px; border:0; border-radius:10px;
     background:#2563eb; color:#fff; font-weight:800; cursor:pointer;
   }
@@ -45,7 +45,7 @@
 
 <script>
 /* ========== Firebase ========== */
-const cfg={
+const cfg = {
   apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
   authDomain:"q-matic-b7d77.firebaseapp.com",
   databaseURL:"https://q-matic-b7d77-default-rtdb.firebaseio.com",
@@ -65,107 +65,117 @@ const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
 /* ========== الأدوات ========== */
-function toArDigits(n){ return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]); }
+function toArDigits(n) {
+  return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
+}
 
 /* ========== الصوت ========== */
-let ttsReady=false;
-document.getElementById('enableBtn').onclick=()=>{
-  try{ window.speechSynthesis.cancel(); }catch(e){}
-  ttsReady=true;
-  document.getElementById('soundGate').style.display='none';
+let ttsReady = false;
+document.getElementById('enableBtn').onclick = () => {
+  try { window.speechSynthesis.cancel(); } catch(e) {}
+  ttsReady = true;
+  document.getElementById('soundGate').style.display = 'none';
 };
 
-function pickArabicVoice(){
-  const voices = window.speechSynthesis.getVoices()||[];
-  const byName = voices.find(v => /naayf|hoda|maged|arabic/i.test(v.name));
+window.speechSynthesis.onvoiceschanged = () => {
+  pickArabicVoice(); // إعادة تحميل الصوت عند توفره
+};
+
+function pickArabicVoice() {
+  const voices = window.speechSynthesis.getVoices() || [];
+  const byName = voices.find(v => /naayf|naif|hoda|maged|arabic/i.test(v.name));
   if (byName) return byName;
   const byLang = voices.find(v => /ar(-|_)?[A-Z]{2}/i.test(v.lang));
   return byLang || voices[0] || null;
 }
 
-function speakOnce(text){
-  return new Promise(resolve=>{
+function speakOnce(text) {
+  return new Promise(resolve => {
     if (!ttsReady || !('speechSynthesis' in window)) { resolve(); return; }
-    // نحذف الحركات الزائدة، ونبقي المطلوبة فقط
+
+    // تحسين التشكيل: حذف التنوين والسكون فقط
     text = text
-      .replace(/[ٌٍُِّْـ]/g, "") // نحذف التنوين والشدات الزائدة
-      .replace(/\s+/g," ")
+      .replace(/[ٌٍْـ]/g, "")
+      .replace(/\s+/g, " ")
       .trim();
+
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ar-SA';
-    u.rate = 1.35;   // أبطأ وأوضح
-    u.pitch = 0.95;  // نغمة رجولية هادئة
+    u.rate = 1.1;
+    u.pitch = 1.0;
     const v = pickArabicVoice(); if (v) u.voice = v;
-    u.onend = resolve; u.onerror = resolve;
+    u.onend = resolve;
+    u.onerror = resolve;
     window.speechSynthesis.speak(u);
   });
 }
 
 /* ========== الجملة ========== */
-function buildFastPhrase(n, w){
+function buildFastPhrase(n, w) {
   const z = "\u200C";
   const num = toArDigits(n);
-  const wnum = (w==null || w==="") ? "" : toArDigits(w);
+  const wnum = (w == null || w === "") ? "" : toArDigits(w);
 
-  // نثبت نطق "تَذكِرة" و "شُبّاك"
-  if(!wnum)
+  if (!wnum)
     return `تَذكِرة${z} رقم${z} ${num}`;
   return `تَذكِرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشُبّاك${z} رقم${z} ${wnum}`;
 }
 
 /* ========== الطابور الصوتي ========== */
 const queue = [];
-let playing=false;
+let playing = false;
 const processed = new Set();
 const bootTs = Date.now() - 5000;
 
-function enqueue(item){
+function enqueue(item) {
   queue.push(item);
-  if(!playing) playNext();
+  if (!playing) playNext();
 }
 
-async function playNext(){
-  if(queue.length===0){ playing=false; return; }
+async function playNext() {
+  if (queue.length === 0) { playing = false; return; }
   playing = true;
 
-  const {number, windowNum} = queue.shift();
+  const { number, windowNum } = queue.shift();
 
   tNumEl.textContent = number;
-  if(windowNum!=null && windowNum!==""){
+  if (windowNum != null && windowNum !== "") {
     wNumEl.textContent = windowNum;
     wWrap.style.display = 'inline';
-  }else wWrap.style.display = 'none';
+  } else {
+    wWrap.style.display = 'none';
+  }
   callEl.style.display = 'block';
 
   const phrase = buildFastPhrase(number, windowNum);
   await speakOnce(phrase);
-  await new Promise(r=>setTimeout(r, 350));
+  await new Promise(r => setTimeout(r, 1000)); // فاصل أطول
   await speakOnce(phrase);
 
-  await new Promise(r=>setTimeout(r, 400));
+  await new Promise(r => setTimeout(r, 500));
   callEl.style.display = 'none';
 
   playNext();
 }
 
 /* ========== جلب رقم الشباك من مصادر متعددة ========== */
-async function resolveWindow(v, n){
+async function resolveWindow(v, n) {
   let cand = v.window ?? v.win ?? v.windowNum ?? v.counter ?? null;
-  if (typeof cand === 'string'){
+  if (typeof cand === 'string') {
     const parsed = Number(cand);
-    cand = Number.isNaN(parsed)?cand.trim():parsed;
+    cand = Number.isNaN(parsed) ? cand.trim() : parsed;
   }
-  if (cand==null || cand==='' || Number.isNaN(cand)){
-    try{
-      const a=await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
-      if(a.exists()) cand=a.val();
-    }catch(e){}
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const a = await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
+      if (a.exists()) cand = a.val();
+    } catch (e) {}
   }
-  if (cand==null || cand==='' || Number.isNaN(cand)){
-    try{
-      const g=await firebase.database().ref(`${ROOT}/operatorWindow`).get();
-      if(g.exists()) cand=g.val();
-    }catch(e){}
+  if (cand == null || cand === '' || Number.isNaN(cand)) {
+    try {
+      const g = await firebase.database().ref(`${ROOT}/operatorWindow`).get();
+      if (g.exists()) cand = g.val();
+    } catch (e) {}
   }
   return cand;
 }
@@ -174,16 +184,16 @@ async function resolveWindow(v, n){
 db.ref(`${ROOT}/calls`)
   .orderByChild('ts')
   .startAt(bootTs)
-  .on('child_added', async snap=>{
-    const key=snap.key, v=snap.val()||{};
-    if(processed.has(key)) return;
+  .on('child_added', async snap => {
+    const key = snap.key, v = snap.val() || {};
+    if (processed.has(key)) return;
     processed.add(key);
 
-    const n=Number(v.number);
-    if(!n) return;
-    const w=await resolveWindow(v, n);
+    const n = Number(v.number);
+    if (!n) return;
+    const w = await resolveWindow(v, n);
 
-    enqueue({number:n, windowNum:w});
+    enqueue({ number: n, windowNum: w });
   });
 </script>
 </body>
