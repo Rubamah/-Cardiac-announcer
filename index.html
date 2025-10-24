@@ -185,10 +185,12 @@ function toArDigits(n){
 function speakOnceWord(text){
   return new Promise(res=>{
     if (!ttsReady || !('speechSynthesis' in window)) { res(); return; }
+    // نحذف أي تنوين قبل النطق
+    text = text.replace(/[ًٌٍ]/g,"").trim();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ar-SA';
-u.rate = 1.12;   // أسرع قليلاً
-u.pitch = 1.05;  // نغمة طبيعية
+    u.rate = 1.18;   // أسرع قليلاً
+    u.pitch = 1.05;  // صوت طبيعي أكثر
     const v = pickArabicVoice(); if (v) u.voice = v;
     u.onend = res; u.onerror = res;
     window.speechSynthesis.speak(u);
@@ -197,7 +199,7 @@ u.pitch = 1.05;  // نغمة طبيعية
 
 // === 3) نطق سلسلة كلمات كلمة-كلمة مع فاصل بسيط ===
 function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }// نطق أسرع وأنعم بين الكلمات
-async function speakWords(words, gap=90){
+async function speakWords(words, gap=50){
   for (const w of words){
     await speakOnceWord(w);
     await wait(gap); // فاصل بسيط جداً بين الكلمات
