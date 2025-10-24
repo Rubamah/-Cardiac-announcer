@@ -33,13 +33,13 @@
 
 <div id="soundGate">
   <div>
-‎    اضغط “تفعيل الصوت” مرة واحدة للسماح بالتشغيل الصوتي.<br>
+    اضغط “تفعيل الصوت” مرة واحدة للسماح بالتشغيل الصوتي.<br>
     <button id="enableBtn">تفعيل الصوت</button>
   </div>
 </div>
 
 <div id="call">
-‎  تذكرة رقم (<b id="tNum"></b>)
+  تذكرة رقم (<b id="tNum"></b>)
   <span id="wWrap" style="display:none">، الرجاء التوجه إلى شباك <b id="wNum"></b></span>
 </div>
 
@@ -58,23 +58,39 @@ firebase.initializeApp(cfg);
 const db = firebase.database();
 const ROOT = "cardiac_demo";
 
-‎/* ========== العناصر ========== */
+/* ========== العناصر ========== */
 const callEl = document.getElementById('call');
 const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
-‎/* ========== الأدوات ========== */
+/* ========== الأدوات ========== */
 function toArDigits(n) {
   return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
 }
 
-‎/* ========== الصوت (بدون أي تعديل على إعداداتك) ========== */
+/* ========== الصوت (تعديل الزر فقط) ========== */
 let ttsReady = false;
+
 document.getElementById('enableBtn').onclick = () => {
   try { window.speechSynthesis.cancel(); } catch(e) {}
-  ttsReady = true;
-  document.getElementById('soundGate').style.display = 'none';
+
+  // warm-up صامت لضمان السماح بالنطق
+  const u = new SpeechSynthesisUtterance(" ");
+  u.lang   = 'ar-SA';
+  u.volume = 0;        // صامت
+  u.rate   = 1;
+  u.pitch  = 1;
+  u.onend  = () => {
+    ttsReady = true;
+    document.getElementById('soundGate').style.display = 'none';
+  };
+  u.onerror = () => {
+    // حتى لو فشل، نكمل ونخفي البوابة
+    ttsReady = true;
+    document.getElementById('soundGate').style.display = 'none';
+  };
+  window.speechSynthesis.speak(u);
 };
 
 window.speechSynthesis.onvoiceschanged = () => {
@@ -108,31 +124,31 @@ function speakOnce(text) {
 }
 function fixNumberWord(n) {
   const map = {
-‎    1: "واحِد",
-‎    2: "اِثنان",
-‎    3: "ثَلاثَة",
-‎    4: "أَربَعَة",
-‎    5: "خَمسَة",
-‎    6: "سِتَّة",
-‎    7: "سَبعَة",
-‎    8: "ثَمانِيَة",
-‎    9: "تِسعَة",
-‎    10: "عَشَرَة"
+    1: "واحِد",
+    2: "اِثنان",
+    3: "ثَلاثَة",
+    4: "أَربَعَة",
+    5: "خَمسَة",
+    6: "سِتَّة",
+    7: "سَبعَة",
+    8: "ثَمانِيَة",
+    9: "تِسعَة",
+    10: "عَشَرَة"
   };
   return map[n] ? map[n] : toArDigits(n);
 }
 
-‎/* ========== الجملة ========== */
+/* ========== الجملة ========== */
 function buildFastPhrase(n, w) {
   const z = "\u200C";
   const num = toArDigits(n);
   const wnum = (w == null || w === "") ? "" : fixNumberWord(w);
   if (!wnum)
-    return `ْتَذكِرة${z} رقم${z} ${num}`;
-  return `ْتَذكِرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشُبّاك${z} رقم${z} ${wnum}`;
+    return `تَذكِرة${z} رقم${z} ${num}`;
+  return `تَذكِرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشُبّاك${z} رقم${z} ${wnum}`;
 }
 
-‎/* ========== الطابور الصوتي ========== */
+/* ========== الطابور الصوتي ========== */
 const queue = [];
 let playing = false;
 const processed = new Set();
@@ -169,23 +185,17 @@ async function playNext() {
   playNext();
 }
 
-‎/* ========== جلب رقم الشباك — تعديل وحيد مهم ========== */
+/* ========== جلب رقم الشباك — نأخذ فقط من نفس عنصر /calls ========== */
 async function resolveWindow(v) {
-‎  // نثق فقط بما جاء مع نفس عنصر الطابور
   let cand = v.window ?? v.win ?? v.windowNum ?? v.counter ?? null;
-
-‎  // إن كانت سترنغ، حوّليها لرقم إن أمكن
   if (typeof cand === 'string') {
     const parsed = Number(cand);
     cand = Number.isNaN(parsed) ? cand.trim() : parsed;
   }
-
-‎  // لا fallback لـ assignment/operatorWindow حتى لا يثبت الشباك بالغلط
-‎  // إن لم تتوفر قيمة واضحة، نرجع null ولن ننطق الشباك
   return (cand === 0 || cand) ? cand : null;
 }
 
-‎/* ========== مستمع Firebase ========== */
+/* ========== مستمع Firebase ========== */
 db.ref(`${ROOT}/calls`)
   .orderByChild('ts')
   .startAt(bootTs)
