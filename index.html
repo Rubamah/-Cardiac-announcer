@@ -16,8 +16,6 @@
     font-weight:800; font-size:clamp(26px,4.5vw,40px); line-height:1.6;
   }
   #call b{font-weight:800}
-
-  /* بوابة السماح بالصوت */
   #soundGate{
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(0,0,0,.75); color:#fff; z-index:10; font-size:22px;
@@ -28,7 +26,6 @@
   }
 </style>
 
-<!-- Firebase compat -->
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 </head>
@@ -47,7 +44,7 @@
 </div>
 
 <script>
-/* ========== إعداد Firebase ========== */
+/* ========== Firebase ========== */
 const cfg={
   apiKey:"AIzaSyCWWnMsge75Q3_MDF9Aj9wo4C5KD6RVGfw",
   authDomain:"q-matic-b7d77.firebaseapp.com",
@@ -61,37 +58,16 @@ firebase.initializeApp(cfg);
 const db = firebase.database();
 const ROOT = "cardiac_demo";
 
-/* ========== عناصر الواجهة ========== */
+/* ========== العناصر ========== */
 const callEl = document.getElementById('call');
 const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
-/* ========== تحويل الأرقام إلى كلمات عربية (بدون تنوين) ========== */
-function numToArWords(n){
-  n = Number(n)||0;
-  if(n===0) return "صفر";
-  const u=["","واحد","اثنان","ثلاثة","أربعة","خمسة","ستة","سبعة","ثمانية","تسعة"];
-  const teens=["عشرة","أحد عشر","اثنا عشر","ثلاثة عشر","أربعة عشر","خمسة عشر","ستة عشر","سبعة عشر","ثمانية عشر","تسعة عشر"];
-  const t=["","","عشرون","ثلاثون","أربعون","خمسون","ستون","سبعون","ثمانون","تسعون"];
-  if(n<10)  return u[n];
-  if(n<20)  return teens[n-10];
-  if(n<100){ const a=n%10, b=(n/10)|0; return a? (u[a]+" و"+t[b]) : t[b]; }
-  if(n<1000){
-    const h=(n/100)|0, r=n%100;
-    const hword = (h===1?"مائة": h===2?"مائتان": (u[h]+" مائة"));
-    return r? (hword+" و"+numToArWords(r)) : hword;
-  }
-  if(n<10000){
-    const th=(n/1000)|0, r=n%1000;
-    const thw = th===1?"ألف": th===2?"ألفان": (u[th]+" آلاف");
-    return r? (thw+" و"+numToArWords(r)) : thw;
-  }
-  // fallback: أرقام عربية
-  return String(n).replace(/\d/g,d=>"٠١٢٣٤٥٦٧٨٩"[d]);
-}
+/* ========== أدوات ========== */
+function toArDigits(n){ return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]); }
 
-/* ========== إعداد الصوت ========== */
+/* ========== الصوت ========== */
 let ttsReady=false;
 document.getElementById('enableBtn').onclick=()=>{
   try{ window.speechSynthesis.cancel(); }catch(e){}
@@ -101,45 +77,41 @@ document.getElementById('enableBtn').onclick=()=>{
 
 function pickArabicVoice(){
   const voices = window.speechSynthesis.getVoices()||[];
-  // نحاول تفضيل أصوات عربية رجالية إن توفرت بالاسم
-  const prefer = [
-    /ar-SA/i, /ar-[A-Z]{2}/i, /Arabic/i
-  ];
-  for(const p of prefer){
-    const v = voices.find(v=>p.test(v.lang)||p.test(v.name));
-    if(v) return v;
-  }
-  return voices[0] || null;
+  const byName = voices.find(v => /naayf|hoda|maged|arabic/i.test(v.name));
+  if (byName) return byName;
+  const byLang = voices.find(v => /ar(-|_)?[A-Z]{2}/i.test(v.lang));
+  return byLang || voices[0] || null;
 }
 
 function speakOnce(text){
   return new Promise(resolve=>{
-    if(!ttsReady || !('speechSynthesis' in window)){
-      resolve(); return;
-    }
+    if (!ttsReady || !('speechSynthesis' in window)) { resolve(); return; }
+    text = text.replace(/[ًٌٍَُِّْـ]/g, "").replace(/\s+/g," ").trim();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ar-SA';
-    u.rate = 1; u.pitch = 1;
-    const v = pickArabicVoice(); if(v) u.voice = v;
-    u.onend = ()=>resolve();
-    u.onerror= ()=>resolve(); // لا نعلق لو صار خطأ
+    u.rate = 1.8; // أسرع
+    u.pitch = 1.0;
+    const v = pickArabicVoice(); if (v) u.voice = v;
+    u.onend = resolve; u.onerror = resolve;
     window.speechSynthesis.speak(u);
   });
 }
 
-function buildPhrase(n, w){
-  // بدون تنوين: نصنا لا يحوي حركات أصلاً
-  const nWords = numToArWords(n);
-  if(w==null || w==="") return `تذكرة رقم ${nWords}.`;
-  const wWords = numToArWords(w);
-  return `تذكرة رقم ${nWords}، الرجاء التوجه إلى شباك ${wWords}.`;
+/* ========== بناء الجملة ========== */
+function buildFastPhrase(n, w){
+  const z = "\u200C";
+  const num = toArDigits(n);
+  const wnum = (w==null || w==="") ? "" : toArDigits(w);
+  if(!wnum)
+    return `تذكرة${z} رقم${z} ${num}`;
+  return `تذكرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشباك${z} رقم${z} ${wnum}`;
 }
 
-/* ========== نظام الطابور الصوتي (FIFO) ========== */
+/* ========== الطابور الصوتي ========== */
 const queue = [];
 let playing=false;
-const processed = new Set(); // مفاتيح push التي تم استلامها
-const bootTs = Date.now() - 5000; // هامش 5 ثواني لتفادي السباق
+const processed = new Set();
+const bootTs = Date.now() - 5000;
 
 function enqueue(item){
   queue.push(item);
@@ -152,145 +124,61 @@ async function playNext(){
 
   const {number, windowNum} = queue.shift();
 
-  // عرض الشريط
   tNumEl.textContent = number;
   if(windowNum!=null && windowNum!==""){
     wNumEl.textContent = windowNum;
     wWrap.style.display = 'inline';
-  }else{
-    wWrap.style.display = 'none';
-  }
+  }else wWrap.style.display = 'none';
   callEl.style.display = 'block';
 
-  // يحوّل الأرقام إلى أرقام عربية هندية
+  const phrase = buildFastPhrase(number, windowNum);
+  await speakOnce(phrase);
+  await new Promise(r=>setTimeout(r, 220));
+  await speakOnce(phrase);
 
-// يبني الجملة مع فواصل مانعة للتنوين
-function buildSpeakPhrase(n, w){
-  const nD = toArDigits(n);
-  const wD = w ? toArDigits(w) : "";
-  const zws = "\u200C"; // الفاصل غير المرئي
-
-  if (!wD)
-    return `تذكرة${zws} رقم${zws} ${nD}.`;
-  else
-    return `تذكرة${zws} رقم${zws} ${nD}، الرجاء${zws} التوجه${zws} إلى${zws} الشباك${zws} رقم${zws} ${wD}.`;
-}
-  // يحوّل الأرقام إلى أرقام عربية ٠١٢٣...
-// === 1) أرقام عربية هندية ===
-function toArDigits(n){
-  return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
-}
-
-// === 2) نطق كلمة واحدة ===
-function speakOnceWord(text){
-  return new Promise(res=>{
-    if (!ttsReady || !('speechSynthesis' in window)) { res(); return; }
-    // نحذف أي تنوين قبل النطق
-    text = text.replace(/[ًٌٍ]/g,"").trim();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ar-SA';
-    u.rate = 2;   // أسرع قليلاً
-    u.pitch = 1.05;  // صوت طبيعي أكثر
-    const v = pickArabicVoice(); if (v) u.voice = v;
-    u.onend = res; u.onerror = res;
-    window.speechSynthesis.speak(u);
-  });
-}
-
-// === 3) نطق سلسلة كلمات كلمة-كلمة مع فاصل بسيط ===
-function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }// نطق أسرع وأنعم بين الكلمات
-async function speakWords(words, gap=5){
-  for (const w of words){
-    await speakOnceWord(w);
-    await wait(gap); // فاصل بسيط جداً بين الكلمات
-  }
-}
-// === 4) نداء (مرتين) كلمة-كلمة: ===
-async function speakCallWordByWord(n, w){
-  const words = w==null || w===""
-    ? ["تذكرة", "رقم", toArDigits(n)]
-    : ["تذكرة", "رقم", toArDigits(n), "الرجاء", "التوجه", "إلى", "الشباك", "رقم", toArDigits(w)];
-
-  for (let i=0; i<2; i++){
-    await speakWords(words, 160); // ينطق كل كلمة لوحدها
-    await wait(350);              // فاصل قبل الإعادة
-  }
-}
-// يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
-
-function cleanArabic(text){
-  return text
-    .replace(/\bواحدٌ\b/g,"واحد")
-    .replace(/\bواحدٍ\b/g,"واحد")
-    .replace(/\bواحدً\b/g,"واحد")
-    .replace(/\bواحد\b/g,"واحد") // تأكيد إضافي
-    .replace(/\bثلاثه\b/g,"ثلاثة")
-    .replace(/\bثلاثهٍ\b/g,"ثلاثة")
-    .replace(/\bثلاثهً\b/g,"ثلاثة")
-    .replace(/\bثلاث\b/g,"ثلاثة"); 
-}
- // 👇 بدّل هذا الجزء بالكامل في playNext():
-// const phrase = buildSpeakPhrase(number, windowNum);
-// await speakOnce(phrase);
-// await new Promise(r=>setTimeout(r, 600));
-// await speakOnce(phrase);
-
-// ✅ واستخدم هذا بداله:
-await speakCallWordByWord(number, windowNum);
-  // فاصل خفيف
-  
-
-  // إبقاء الشريط لحظة إضافية ثم إخفاؤه
-  await new Promise(r=>setTimeout(r, 600));
+  await new Promise(r=>setTimeout(r, 300));
   callEl.style.display = 'none';
 
-  // إلى الذي يليه
   playNext();
 }
-// دالة تجيب رقم الشباك من أكثر من مصدر
+
+/* ========== جلب رقم الشباك من مصادر متعددة ========== */
 async function resolveWindow(v, n){
   let cand = v.window ?? v.win ?? v.windowNum ?? v.counter ?? null;
-
-  if (typeof cand === 'string') {
+  if (typeof cand === 'string'){
     const parsed = Number(cand);
-    cand = Number.isNaN(parsed) ? cand.trim() : parsed;
+    cand = Number.isNaN(parsed)?cand.trim():parsed;
   }
-
-  if (cand == null || cand === '' || Number.isNaN(cand)) {
-    try {
-      const a = await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
-      if (a.exists()) cand = a.val();
-    } catch(e){}
+  if (cand==null || cand==='' || Number.isNaN(cand)){
+    try{
+      const a=await firebase.database().ref(`${ROOT}/assignment/${n}/window`).get();
+      if(a.exists()) cand=a.val();
+    }catch(e){}
   }
-
-  if (cand == null || cand === '' || Number.isNaN(cand)) {
-    try {
-      const g = await firebase.database().ref(`${ROOT}/operatorWindow`).get();
-      if (g.exists()) cand = g.val();
-    } catch(e){}
+  if (cand==null || cand==='' || Number.isNaN(cand)){
+    try{
+      const g=await firebase.database().ref(`${ROOT}/operatorWindow`).get();
+      if(g.exists()) cand=g.val();
+    }catch(e){}
   }
-
   return cand;
 }
-/* ========== الاستماع إلى /calls كطابور ========== */
+
+/* ========== مستمع Firebase ========== */
 db.ref(`${ROOT}/calls`)
   .orderByChild('ts')
   .startAt(bootTs)
   .on('child_added', async snap=>{
-    const key = snap.key;
-    const v   = snap.val() || {};
-    if (processed.has(key)) return;
+    const key=snap.key, v=snap.val()||{};
+    if(processed.has(key)) return;
     processed.add(key);
 
-    const n = Number(v.number);
-    if (!n) return;
+    const n=Number(v.number);
+    if(!n) return;
+    const w=await resolveWindow(v, n);
 
-    // 👇 هنا نستخدم الدالة اللي أضفناها في الخطوة ١
-    const w = await resolveWindow(v, n);
-
-    enqueue({ number: n, windowNum: w });
+    enqueue({number:n, windowNum:w});
   });
-
 </script>
 </body>
 </html>
