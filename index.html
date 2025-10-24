@@ -176,8 +176,44 @@ function buildSpeakPhrase(n, w){
     return `تذكرة${zws} رقم${zws} ${nD}، الرجاء${zws} التوجه${zws} إلى${zws} الشباك${zws} رقم${zws} ${wD}.`;
 }
   // يحوّل الأرقام إلى أرقام عربية ٠١٢٣...
+// === 1) أرقام عربية هندية ===
 function toArDigits(n){
-  return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+  return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
+}
+
+// === 2) نطق كلمة واحدة ===
+function speakOnceWord(text){
+  return new Promise(res=>{
+    if (!ttsReady || !('speechSynthesis' in window)) { res(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ar-SA';
+    u.rate = 0.97;   // أهدأ لتقليل "الكحّة"
+    u.pitch = 1;
+    const v = pickArabicVoice(); if (v) u.voice = v;
+    u.onend = res; u.onerror = res;
+    window.speechSynthesis.speak(u);
+  });
+}
+
+// === 3) نطق سلسلة كلمات كلمة-كلمة مع فاصل بسيط ===
+function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }
+async function speakWords(words, gap=160){
+  for (const w of words){
+    await speakOnceWord(w);
+    await wait(gap);
+  }
+}
+
+// === 4) نداء (مرتين) كلمة-كلمة: ===
+async function speakCallWordByWord(n, w){
+  const words = w==null || w===""
+    ? ["تذكرة", "رقم", toArDigits(n)]
+    : ["تذكرة", "رقم", toArDigits(n), "الرجاء", "التوجه", "إلى", "الشباك", "رقم", toArDigits(w)];
+
+  for (let i=0; i<2; i++){
+    await speakWords(words, 160); // ينطق كل كلمة لوحدها
+    await wait(350);              // فاصل قبل الإعادة
+  }
 }
 // يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
 
@@ -192,11 +228,16 @@ function cleanArabic(text){
     .replace(/\bثلاثهً\b/g,"ثلاثة")
     .replace(/\bثلاث\b/g,"ثلاثة"); 
 }
-  const phrase = buildSpeakPhrase(number, windowNum);
-  await speakOnce(phrase);
+ // 👇 بدّل هذا الجزء بالكامل في playNext():
+// const phrase = buildSpeakPhrase(number, windowNum);
+// await speakOnce(phrase);
+// await new Promise(r=>setTimeout(r, 600));
+// await speakOnce(phrase);
+
+// ✅ واستخدم هذا بداله:
+await speakCallWordByWord(number, windowNum);
   // فاصل خفيف
-  await new Promise(r=>setTimeout(r, 600));
-  await speakOnce(phrase);
+  
 
   // إبقاء الشريط لحظة إضافية ثم إخفاؤه
   await new Promise(r=>setTimeout(r, 600));
