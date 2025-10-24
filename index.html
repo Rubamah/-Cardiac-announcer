@@ -109,12 +109,27 @@ function speakOnce(text) {
     window.speechSynthesis.speak(u);
   });
 }
+function fixNumberWord(n) {
+  const map = {
+    1: "واحِد",
+    2: "اِثنان",
+    3: "ثَلاثَة",
+    4: "أَربَعَة",
+    5: "خَمسَة",
+    6: "سِتَّة",
+    7: "سَبعَة",
+    8: "ثَمانِيَة",
+    9: "تِسعَة",
+    10: "عَشَرَة"
+  };
+  return map[n] ? map[n] : toArDigits(n);
+}
 
 /* ========== الجملة ========== */
 function buildFastPhrase(n, w) {
   const z = "\u200C";
   const num = toArDigits(n);
-  const wnum = (w == null || w === "") ? "" : toArDigits(w);
+  const wnum = (w == null || w === "") ? "" : fixNumberWord(w);
 
   if (!wnum)
     return `تَذكِرة${z} رقم${z} ${num}`;
