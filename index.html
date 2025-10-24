@@ -171,7 +171,8 @@ function buildSpeakPhrase(n, w){
   const nD = toArDigits(n);
   if (w == null || w === "") return `تذكرة رقم ${nD}.`;
   const wD = toArDigits(w);
-  return `تذكرة رقم ${nD}، الرجاء التوجه إلى شباك ${wD}.`;
+  // هذا السطر هو الفرق، أضفنا كلمة "رقم" قبل رقم الشباك
+  return `تذكرة رقم ${nD}، الرجاء التوجه إلى الشباك رقم ${wD}.`;
 }
 function cleanArabic(text){
   return text
