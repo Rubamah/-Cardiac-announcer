@@ -169,10 +169,15 @@ function toArDigits(n){
 // يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
 function buildSpeakPhrase(n, w){
   const nD = toArDigits(n);
-  if (w == null || w === "") return `تذكرة رقم ${nD}.`;
-  const wD = toArDigits(w);
-  // هذا السطر هو الفرق، أضفنا كلمة "رقم" قبل رقم الشباك
-  return `تذكرة رقم ${nD}، الرجاء التوجه إلى الشباك رقم ${wD}.`;
+  const wD = w ? toArDigits(w) : "";
+
+  // نحط فاصل غير مرئي يمنع الدمج النحوي والتنوين (U+200C)
+  const zws = "\u200C";
+
+  if (!wD)
+    return `تذكرة${zws} رقم${zws} ${nD}.`;
+  else
+    return `تذكرة${zws} رقم${zws} ${nD}، الرجاء${zws} التوجه${zws} إلى${zws} الشباك${zws} رقم${zws} ${wD}.`;
 }
 function cleanArabic(text){
   return text
