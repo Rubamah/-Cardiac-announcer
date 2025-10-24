@@ -161,24 +161,26 @@ async function playNext(){
     wWrap.style.display = 'none';
   }
   callEl.style.display = 'block';
-  // يحوّل الأرقام إلى أرقام عربية ٠١٢٣...
-function toArDigits(n){
-  return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
-}
 
-// يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
+  // يحوّل الأرقام إلى أرقام عربية هندية
+
+// يبني الجملة مع فواصل مانعة للتنوين
 function buildSpeakPhrase(n, w){
   const nD = toArDigits(n);
   const wD = w ? toArDigits(w) : "";
-
-  // نحط فاصل غير مرئي يمنع الدمج النحوي والتنوين (U+200C)
-  const zws = "\u200C";
+  const zws = "\u200C"; // الفاصل غير المرئي
 
   if (!wD)
     return `تذكرة${zws} رقم${zws} ${nD}.`;
   else
     return `تذكرة${zws} رقم${zws} ${nD}، الرجاء${zws} التوجه${zws} إلى${zws} الشباك${zws} رقم${zws} ${wD}.`;
 }
+  // يحوّل الأرقام إلى أرقام عربية ٠١٢٣...
+function toArDigits(n){
+  return String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+}
+// يبني جملة "للنطق" باستخدام الأرقام بدل الكلمات لتفادي التنوين
+
 function cleanArabic(text){
   return text
     .replace(/\bواحدٌ\b/g,"واحد")
