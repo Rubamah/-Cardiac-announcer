@@ -64,7 +64,7 @@ const tNumEl = document.getElementById('tNum');
 const wWrap  = document.getElementById('wWrap');
 const wNumEl = document.getElementById('wNum');
 
-/* ========== أدوات ========== */
+/* ========== الأدوات ========== */
 function toArDigits(n){ return String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]); }
 
 /* ========== الصوت ========== */
@@ -86,25 +86,31 @@ function pickArabicVoice(){
 function speakOnce(text){
   return new Promise(resolve=>{
     if (!ttsReady || !('speechSynthesis' in window)) { resolve(); return; }
-    text = text.replace(/[ًٌٍَُِّْـ]/g, "").replace(/\s+/g," ").trim();
+    // نحذف الحركات الزائدة، ونبقي المطلوبة فقط
+    text = text
+      .replace(/[ٌٍُِّْـ]/g, "") // نحذف التنوين والشدات الزائدة
+      .replace(/\s+/g," ")
+      .trim();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ar-SA';
-    u.rate = 1.8; // أسرع
-    u.pitch = 1.0;
+    u.rate = 1.35;   // أبطأ وأوضح
+    u.pitch = 0.95;  // نغمة رجولية هادئة
     const v = pickArabicVoice(); if (v) u.voice = v;
     u.onend = resolve; u.onerror = resolve;
     window.speechSynthesis.speak(u);
   });
 }
 
-/* ========== بناء الجملة ========== */
+/* ========== الجملة ========== */
 function buildFastPhrase(n, w){
   const z = "\u200C";
   const num = toArDigits(n);
   const wnum = (w==null || w==="") ? "" : toArDigits(w);
+
+  // نثبت نطق "تَذكِرة" و "شُبّاك"
   if(!wnum)
-    return `تذكرة${z} رقم${z} ${num}`;
-  return `تذكرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشباك${z} رقم${z} ${wnum}`;
+    return `تَذكِرة${z} رقم${z} ${num}`;
+  return `تَذكِرة${z} رقم${z} ${num} الرجاء${z} التوجه${z} إلى${z} الشُبّاك${z} رقم${z} ${wnum}`;
 }
 
 /* ========== الطابور الصوتي ========== */
@@ -133,10 +139,10 @@ async function playNext(){
 
   const phrase = buildFastPhrase(number, windowNum);
   await speakOnce(phrase);
-  await new Promise(r=>setTimeout(r, 220));
+  await new Promise(r=>setTimeout(r, 350));
   await speakOnce(phrase);
 
-  await new Promise(r=>setTimeout(r, 300));
+  await new Promise(r=>setTimeout(r, 400));
   callEl.style.display = 'none';
 
   playNext();
