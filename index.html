@@ -161,6 +161,8 @@ async function playNext() {
     wWrap.style.display = 'none';
   }
   callEl.style.display = 'block';
+  db.ref(`${ROOT}/activeCall`).set({ number, window: windowNum });
+
 
   const phrase = buildFastPhrase(number, windowNum);
   await speakOnce(phrase);
