@@ -166,9 +166,13 @@ async function playNext() {
 
   const phrase = buildFastPhrase(number, windowNum);
   await speakOnce(phrase);
-await new Promise(r => setTimeout(r, 500));
-callEl.style.display = 'none';
-playNext();
+  await new Promise(r => setTimeout(r, 1000)); // فاصل أطول
+  await speakOnce(phrase);
+
+  await new Promise(r => setTimeout(r, 500));
+  callEl.style.display = 'none';
+
+  playNext();
 }
 
 /* ========== جلب رقم الشباك من مصادر متعددة ========== */
